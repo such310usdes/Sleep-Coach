@@ -1,5 +1,6 @@
 {
   "name": "sleep-coach",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "node ./node_modules/vite/bin/vite.js",
