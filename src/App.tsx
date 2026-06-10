@@ -15,12 +15,16 @@ import {
   Target,
   Trash2,
 } from 'lucide-react';
+import { AchievementToast } from './components/AchievementToast';
 import { DailyMissionCard } from './components/DailyMissionCard';
+import { LevelProgressCard } from './components/LevelProgressCard';
 import { StampCard } from './components/StampCard';
+import { WeeklyReviewCard } from './components/WeeklyReviewCard';
 import { SLEEP_MISSIONS } from './data/sleepMissions';
 import {
   getDateKey,
   getMonthKey,
+  getMonthStats,
   recalculateStats,
   selectDailyMission,
 } from './utils/streak';
@@ -135,16 +139,16 @@ function calculateScore(
   goalHours = DEFAULT_GOAL_HOURS,
 ) {
   const duration = calculateDurationHours(record.bedtime, record.wakeTime);
-  let score = 100;
+  let score = 92;
 
-  score -= Math.abs(duration - goalHours) * 7;
-  if (record.mood === 'とても良い') score += 4;
-  if (record.mood === '悪い') score -= 10;
-  if (record.sleepiness === '強い') score -= 12;
-  if (record.sleepiness === '少ない') score += 3;
-  if (record.caffeine === '少し') score -= 4;
-  if (record.caffeine === '多い') score -= 12;
-  score -= Math.min(record.phoneMinutes / 10, 12);
+  score -= Math.abs(duration - goalHours) * 8;
+  if (record.mood === 'とても良い') score += 3;
+  if (record.mood === '悪い') score -= 12;
+  if (record.sleepiness === '強い') score -= 14;
+  if (record.sleepiness === '少ない') score += 2;
+  if (record.caffeine === '少し') score -= 5;
+  if (record.caffeine === '多い') score -= 14;
+  score -= Math.min(record.phoneMinutes / 8, 16);
 
   return Math.max(45, Math.min(100, Math.round(score)));
 }
@@ -226,6 +230,94 @@ function buildAiComment(record: SleepRecord | undefined, goalHours: number) {
   return comments.join('');
 }
 
+function buildScoreInsight(record: SleepRecord | undefined, score: number, goalHours: number) {
+  const remaining = Math.max(0, 100 - score);
+
+  if (!record) {
+    return {
+      progressText: `あと${remaining}点で理想的な睡眠に近づきます`,
+      detail: 'まずは1回記録すると、睡眠時間・スマホ時間・眠気から改善ポイントが見えやすくなります。',
+    };
+  }
+
+  if (record.phoneMinutes >= 45) {
+    return {
+      progressText: `あと${remaining}点で理想的な睡眠に近づきます`,
+      detail: '睡眠時間は整っていても、寝る前のスマホ時間を少し減らすとさらに整いやすくなります。',
+    };
+  }
+
+  if (record.caffeine === '多い') {
+    return {
+      progressText: `あと${remaining}点で理想的な睡眠に近づきます`,
+      detail: '睡眠時間に加えて、午後のカフェイン量を見直すと夜の眠気を守りやすくなります。',
+    };
+  }
+
+  const durationGap = Math.round(Math.abs(record.durationHours - goalHours) * 10) / 10;
+  if (durationGap > 0.5) {
+    return {
+      progressText: `あと${remaining}点で理想的な睡眠に近づきます`,
+      detail: `目標睡眠時間との差が${durationGap}時間あります。就寝または起床の時刻を少しだけ調整してみましょう。`,
+    };
+  }
+
+  return {
+    progressText: `あと${remaining}点で理想的な睡眠に近づきます`,
+    detail: '睡眠時間は良好です。次は起床時刻のばらつきや寝る前の刺激を少し減らすと、さらに整いやすくなります。',
+  };
+}
+
+function buildMissionReason(record: SleepRecord | undefined, dayCount: number, goalHours: number) {
+  if (dayCount <= 1) {
+    return '継続の最初なので、まずは短時間でできる行動から始めます。小さく達成することで続けやすくなります。';
+  }
+
+  if (record?.phoneMinutes && record.phoneMinutes >= 45) {
+    return '寝る前のスマホ時間が長めなので、夜の光刺激や気持ちの切り替えを意識しやすいミッションを選んでいます。';
+  }
+
+  if (record && Math.abs(record.durationHours - goalHours) <= 0.5) {
+    return '最近の睡眠時間が目標に近いので、次はリズムを整える行動を提案しています。';
+  }
+
+  if (record?.sleepiness === '強い') {
+    return '日中の眠気が強めなので、生活リズムの土台を整えやすいミッションを選んでいます。';
+  }
+
+  return '今の継続日数に合わせて、無理なく少しずつ睡眠習慣を育てるミッションを選んでいます。';
+}
+
+function buildWeeklyReview(
+  weeklyData: Array<{ hours: number; score: number; hasRecord: boolean; dateKey: string }>,
+  stampedDates: string[],
+) {
+  const recordedDays = weeklyData.filter((day) => day.hasRecord);
+  const averageHours =
+    recordedDays.reduce((total, day) => total + day.hours, 0) / Math.max(recordedDays.length, 1);
+  const averageScore =
+    recordedDays.reduce((total, day) => total + day.score, 0) / Math.max(recordedDays.length, 1);
+  const weekDateKeys = new Set(weeklyData.map((day) => day.dateKey));
+  const missionCompletedDays = stampedDates.filter((dateKey) => weekDateKeys.has(dateKey)).length;
+
+  let comment = 'まずは記録とミッションを数日続けて、あなたの睡眠リズムを見える化していきましょう。';
+
+  if (recordedDays.length >= 3 && averageHours >= 7 && missionCompletedDays >= 3) {
+    comment = '今週は睡眠時間とミッションの積み上げが安定しています。次は起床時間のばらつきを少し減らしてみましょう。';
+  } else if (missionCompletedDays >= 3) {
+    comment = 'ミッション達成が続いています。睡眠記録も合わせると、改善ポイントがさらに見えやすくなります。';
+  } else if (recordedDays.length >= 3) {
+    comment = '睡眠記録が増えてきました。次はミッション達成日を少し増やすと、習慣化につながりやすくなります。';
+  }
+
+  return {
+    averageHours,
+    averageScore,
+    missionCompletedDays,
+    comment,
+  };
+}
+
 export default function App() {
   const [view, setView] = useState<View>('home');
   const [records, setRecords] = useState<SleepRecord[]>(loadRecords);
@@ -236,6 +328,10 @@ export default function App() {
   );
   const [missionStats, setMissionStats] = useState(loadMissionStats);
   const [stampMonth, setStampMonth] = useState(() => getMonthKey());
+  const [achievementToast, setAchievementToast] = useState<{ isVisible: boolean; streak: number }>({
+    isVisible: false,
+    streak: 0,
+  });
   const [form, setForm] = useState<FormState>(initialForm);
 
   const todayKey = getDateKey();
@@ -270,11 +366,15 @@ export default function App() {
   const isTodayMissionCompleted = stampedDates.includes(todayKey);
   const latestRecord = sortedRecords[0];
   const latestScore = latestRecord?.score ?? 78;
+  const scoreInsight = buildScoreInsight(latestRecord, latestScore, goalHours);
   const aiComment = buildAiComment(latestRecord, goalHours);
   const weeklyData = useMemo(() => getWeeklyData(sortedRecords), [sortedRecords]);
   const weeklyAverage =
     weeklyData.filter((day) => day.hasRecord).reduce((total, day) => total + day.hours, 0) /
     Math.max(weeklyData.filter((day) => day.hasRecord).length, 1);
+  const missionReason = buildMissionReason(latestRecord, dailyMission.dayCount, goalHours);
+  const weeklyReview = buildWeeklyReview(weeklyData, stampedDates);
+  const { completedCount: monthCompletedCount } = getMonthStats(stampedDates, getMonthKey());
   const previewDuration = useMemo(
     () => calculateDurationHours(form.bedtime, form.wakeTime),
     [form.bedtime, form.wakeTime],
@@ -318,7 +418,15 @@ export default function App() {
   };
 
   const completeTodayMission = () => {
-    setStampedDates((current) => (current.includes(todayKey) ? current : [...current, todayKey].sort()));
+    setStampedDates((current) => {
+      if (current.includes(todayKey)) return current;
+
+      const nextDates = [...current, todayKey].sort();
+      const nextStats = recalculateStats(nextDates, todayKey);
+      setAchievementToast({ isVisible: true, streak: nextStats.currentStreak });
+
+      return nextDates;
+    });
     setCompletedMissionIds((current) =>
       current.includes(dailyMission.mission.id) ? current : [...current, dailyMission.mission.id],
     );
@@ -326,6 +434,11 @@ export default function App() {
 
   return (
     <main className="min-h-screen bg-[#edf5f4] text-slate-900">
+      <AchievementToast
+        isVisible={achievementToast.isVisible}
+        streak={achievementToast.streak}
+        onClose={() => setAchievementToast((current) => ({ ...current, isVisible: false }))}
+      />
       <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-5 py-6">
         <header className="mb-5 flex items-center justify-between">
           <button
@@ -359,6 +472,24 @@ export default function App() {
 
         {view === 'home' && (
           <section className="flex flex-1 flex-col gap-4">
+            <DailyMissionCard
+              mission={dailyMission.mission}
+              todayKey={todayKey}
+              dayCount={dailyMission.dayCount}
+              missionReason={missionReason}
+              isCompleted={isTodayMissionCompleted}
+              onComplete={completeTodayMission}
+            />
+
+            <LevelProgressCard
+              level={dailyMission.level}
+              dayCount={dailyMission.dayCount}
+              isTodayCompleted={isTodayMissionCompleted}
+              currentStreak={missionStats.currentStreak}
+              monthCompletedCount={monthCompletedCount}
+              onOpenStampCard={() => setView('stamps')}
+            />
+
             <div className="rounded-lg bg-white p-6 shadow-sm">
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -377,21 +508,22 @@ export default function App() {
                   style={{ width: `${latestScore}%` }}
                 />
               </div>
+              <p className="mt-3 text-sm font-bold text-slate-700">{scoreInsight.progressText}</p>
+              <p className="mt-2 text-sm leading-6 text-slate-500">{scoreInsight.detail}</p>
               <p className="mt-3 text-sm text-slate-500">
                 {latestRecord
                   ? `${formatDate(latestRecord.date)} の記録から計算`
                   : 'まだ記録がないためサンプル値を表示中'}
               </p>
+              <button
+                type="button"
+                onClick={() => setView('record')}
+                className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-teal-600 font-bold text-white shadow-sm"
+              >
+                <Clock3 size={20} />
+                睡眠を記録
+              </button>
             </div>
-
-            <button
-              type="button"
-              onClick={() => setView('record')}
-              className="flex min-h-28 flex-col justify-between rounded-lg bg-teal-600 p-5 text-left font-bold text-white shadow-sm"
-            >
-              <Clock3 size={26} />
-              <span>睡眠を記録</span>
-            </button>
 
             <div className="rounded-lg bg-[#132238] p-5 text-white shadow-sm">
               <div className="mb-3 flex items-center gap-2 text-teal-200">
@@ -402,15 +534,6 @@ export default function App() {
                 {aiComment}
               </p>
             </div>
-
-            <DailyMissionCard
-              mission={dailyMission.mission}
-              todayKey={todayKey}
-              dayCount={dailyMission.dayCount}
-              isCompleted={isTodayMissionCompleted}
-              onComplete={completeTodayMission}
-              onOpenStampCard={() => setView('stamps')}
-            />
 
             <div className="rounded-lg bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-center justify-between gap-3">
@@ -471,6 +594,13 @@ export default function App() {
                 })}
               </div>
             </div>
+
+            <WeeklyReviewCard
+              averageHours={weeklyReview.averageHours}
+              averageScore={weeklyReview.averageScore}
+              missionCompletedDays={weeklyReview.missionCompletedDays}
+              comment={weeklyReview.comment}
+            />
 
             <a
               href={FEEDBACK_FORM_URL}

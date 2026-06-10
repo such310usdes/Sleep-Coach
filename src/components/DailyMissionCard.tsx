@@ -1,22 +1,22 @@
-import { CheckCircle2, Flame, Timer, Trophy } from 'lucide-react';
+import { CheckCircle2, HelpCircle, Timer, Trophy } from 'lucide-react';
 import type { SleepMission } from '../data/sleepMissions';
 
 type DailyMissionCardProps = {
   mission: SleepMission;
   todayKey: string;
   dayCount: number;
+  missionReason: string;
   isCompleted: boolean;
   onComplete: () => void;
-  onOpenStampCard: () => void;
 };
 
 export function DailyMissionCard({
   mission,
   todayKey,
   dayCount,
+  missionReason,
   isCompleted,
   onComplete,
-  onOpenStampCard,
 }: DailyMissionCardProps) {
   return (
     <section className="rounded-lg bg-white p-5 shadow-sm">
@@ -43,31 +43,28 @@ export function DailyMissionCard({
 
       <div className="mt-4 space-y-3">
         <InfoBlock label="やること" text={mission.action} />
+        <div className="rounded-md bg-teal-50 p-3">
+          <p className="flex items-center gap-1 text-xs font-bold text-teal-700">
+            <HelpCircle size={14} />
+            なぜ今日これ？
+          </p>
+          <p className="mt-1 text-sm leading-6 text-teal-900">{missionReason}</p>
+        </div>
         <InfoBlock label="理由" text={mission.reason} />
         <InfoBlock label="おすすめタイミング" text={mission.bestTiming} />
       </div>
 
-      <div className="mt-5 grid grid-cols-1 gap-3">
-        <button
-          type="button"
-          onClick={onComplete}
-          disabled={isCompleted}
-          className={`flex h-13 min-h-13 items-center justify-center gap-2 rounded-lg px-4 py-3 font-bold shadow-sm ${
-            isCompleted ? 'bg-emerald-50 text-emerald-700' : 'bg-teal-600 text-white'
-          }`}
-        >
-          {isCompleted ? <CheckCircle2 size={20} /> : <Trophy size={20} />}
-          {isCompleted ? '今日のスタンプ達成済み' : '達成してスタンプを押す'}
-        </button>
-        <button
-          type="button"
-          onClick={onOpenStampCard}
-          className="flex h-12 items-center justify-center gap-2 rounded-lg bg-amber-50 font-bold text-amber-800"
-        >
-          <Flame size={19} />
-          スタンプカードを見る
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={onComplete}
+        disabled={isCompleted}
+        className={`mt-5 flex min-h-14 w-full items-center justify-center gap-2 rounded-lg px-4 py-3 font-bold shadow-sm ${
+          isCompleted ? 'bg-emerald-50 text-emerald-700' : 'bg-teal-600 text-white'
+        }`}
+      >
+        {isCompleted ? <CheckCircle2 size={20} /> : <Trophy size={20} />}
+        {isCompleted ? '今日のスタンプ達成済み' : '達成してスタンプを押す'}
+      </button>
     </section>
   );
 }
