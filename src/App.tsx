@@ -328,6 +328,7 @@ export default function App() {
   );
   const [missionStats, setMissionStats] = useState(loadMissionStats);
   const [stampMonth, setStampMonth] = useState(() => getMonthKey());
+  const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [achievementToast, setAchievementToast] = useState<{ isVisible: boolean; streak: number }>({
     isVisible: false,
     streak: 0,
@@ -481,15 +482,6 @@ export default function App() {
               onComplete={completeTodayMission}
             />
 
-            <LevelProgressCard
-              level={dailyMission.level}
-              dayCount={dailyMission.dayCount}
-              isTodayCompleted={isTodayMissionCompleted}
-              currentStreak={missionStats.currentStreak}
-              monthCompletedCount={monthCompletedCount}
-              onOpenStampCard={() => setView('stamps')}
-            />
-
             <div className="rounded-lg bg-white p-6 shadow-sm">
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -525,6 +517,15 @@ export default function App() {
               </button>
             </div>
 
+            <LevelProgressCard
+              level={dailyMission.level}
+              dayCount={dailyMission.dayCount}
+              isTodayCompleted={isTodayMissionCompleted}
+              currentStreak={missionStats.currentStreak}
+              monthCompletedCount={monthCompletedCount}
+              onOpenStampCard={() => setView('stamps')}
+            />
+
             <div className="rounded-lg bg-[#132238] p-5 text-white shadow-sm">
               <div className="mb-3 flex items-center gap-2 text-teal-200">
                 <Sparkles size={19} />
@@ -541,24 +542,42 @@ export default function App() {
                   <p className="text-sm font-semibold text-slate-500">目標睡眠時間</p>
                   <p className="mt-1 text-2xl font-black text-slate-900">{goalHours}時間</p>
                 </div>
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-700">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingGoal((current) => !current)}
+                  className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-700"
+                  aria-label="目標睡眠時間を変更"
+                >
                   <Target size={24} />
+                </button>
+              </div>
+              <p className="text-sm leading-6 text-slate-500">
+                ホームでは固定表示です。変更したいときだけ右上のアイコンから調整できます。
+              </p>
+              {isEditingGoal && (
+                <div className="mt-4">
+                  <p className="mb-2 text-xs font-bold text-slate-500">目標を選択</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5].map((hours) => (
+                      <button
+                        key={hours}
+                        type="button"
+                        onClick={() => {
+                          setGoalHours(hours);
+                          setIsEditingGoal(false);
+                        }}
+                        className={`h-10 rounded-md text-sm font-bold ${
+                          goalHours === hours
+                            ? 'bg-amber-500 text-white'
+                            : 'bg-amber-50 text-amber-800'
+                        }`}
+                      >
+                        {hours}h
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-              <input
-                type="range"
-                min="5"
-                max="10"
-                step="0.5"
-                value={goalHours}
-                onChange={(event) => setGoalHours(Number(event.target.value))}
-                className="w-full accent-amber-500"
-                aria-label="目標睡眠時間"
-              />
-              <div className="mt-2 flex justify-between text-xs font-semibold text-slate-400">
-                <span>5時間</span>
-                <span>10時間</span>
-              </div>
+              )}
             </div>
 
             <div className="rounded-lg bg-white p-5 shadow-sm">
