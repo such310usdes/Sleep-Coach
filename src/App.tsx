@@ -2,13 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import {
   BedDouble,
-  BookOpen,
   ChevronLeft,
   Clock3,
   Coffee,
   MessageSquareText,
   History,
-  Lightbulb,
   Moon,
   Save,
   Smartphone,
@@ -17,9 +15,17 @@ import {
   Target,
   Trash2,
 } from 'lucide-react';
-import { SLEEP_TIPS, getDailyTip } from './sleepTips';
+import { DailyMissionCard } from './components/DailyMissionCard';
+import { StampCard } from './components/StampCard';
+import { SLEEP_MISSIONS } from './data/sleepMissions';
+import {
+  getDateKey,
+  getMonthKey,
+  recalculateStats,
+  selectDailyMission,
+} from './utils/streak';
 
-type View = 'home' | 'record' | 'history' | 'tips';
+type View = 'home' | 'record' | 'history' | 'stamps';
 
 type Mood = 'とても良い' | '良い' | '普通' | '悪い';
 type Sleepiness = '少ない' | '普通' | '強い';
@@ -50,18 +56,15 @@ type FormState = {
 
 const STORAGE_KEY = 'sleep-improvement-records';
 const GOAL_KEY = 'sleep-improvement-goal-hours';
-const COLLECTED_TIPS_KEY = 'sleep-improvement-collected-tips';
+const STAMPED_DATES_KEY = 'sleep-mission-stamped-dates';
+const COMPLETED_MISSION_IDS_KEY = 'sleep-mission-completed-ids';
+const MISSION_STATS_KEY = 'sleep-mission-stats';
 const DEFAULT_GOAL_HOURS = 7.5;
 const FEEDBACK_FORM_URL =
   'https://docs.google.com/forms/d/e/1FAIpQLSd4FiHOVO-vlTi1XXdtGjxo_d0NYwLPwXz4Cai_smp7HS1J-w/viewform?usp=header';
 
 function getTodayDateInput() {
-  return new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Asia/Tokyo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
+  return getDateKey();
 }
 
 const initialForm: FormState = {
@@ -90,12 +93,27 @@ function loadGoalHours() {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_GOAL_HOURS;
 }
 
-function loadCollectedTipIds(): number[] {
+function loadStringArray(key: string): string[] {
   try {
-    const saved = localStorage.getItem(COLLECTED_TIPS_KEY);
-    return saved ? (JSON.parse(saved) as number[]) : [];
+    const saved = localStorage.getItem(key);
+    return saved ? (JSON.parse(saved) as string[]) : [];
   } catch {
     return [];
+  }
+}
+
+function loadMissionStats() {
+  try {
+    const saved = localStorage.getItem(MISSION_STATS_KEY);
+    return saved
+      ? (JSON.parse(saved) as {
+          lastCompletedDate: string | null;
+          currentStreak: number;
+          longestStreak: number;
+        })
+      : recalculateStats([]);
+  } catch {
+    return recalculateStats([]);
   }
 }
 
@@ -212,10 +230,15 @@ export default function App() {
   const [view, setView] = useState<View>('home');
   const [records, setRecords] = useState<SleepRecord[]>(loadRecords);
   const [goalHours, setGoalHours] = useState(loadGoalHours);
-  const [collectedTipIds, setCollectedTipIds] = useState<number[]>(loadCollectedTipIds);
+  const [stampedDates, setStampedDates] = useState<string[]>(() => loadStringArray(STAMPED_DATES_KEY));
+  const [completedMissionIds, setCompletedMissionIds] = useState<string[]>(() =>
+    loadStringArray(COMPLETED_MISSION_IDS_KEY),
+  );
+  const [missionStats, setMissionStats] = useState(loadMissionStats);
+  const [stampMonth, setStampMonth] = useState(() => getMonthKey());
   const [form, setForm] = useState<FormState>(initialForm);
 
-  const dailyTip = useMemo(() => getDailyTip(), []);
+  const todayKey = getDateKey();
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
@@ -226,23 +249,25 @@ export default function App() {
   }, [goalHours]);
 
   useEffect(() => {
-    setCollectedTipIds((current) =>
-      current.includes(dailyTip.id) ? current : [...current, dailyTip.id],
-    );
-  }, [dailyTip.id]);
+    localStorage.setItem(STAMPED_DATES_KEY, JSON.stringify(stampedDates));
+    const nextStats = recalculateStats(stampedDates, todayKey);
+    setMissionStats(nextStats);
+    localStorage.setItem(MISSION_STATS_KEY, JSON.stringify(nextStats));
+  }, [stampedDates, todayKey]);
 
   useEffect(() => {
-    localStorage.setItem(COLLECTED_TIPS_KEY, JSON.stringify(collectedTipIds));
-  }, [collectedTipIds]);
+    localStorage.setItem(COMPLETED_MISSION_IDS_KEY, JSON.stringify(completedMissionIds));
+  }, [completedMissionIds]);
 
   const sortedRecords = useMemo(
     () => [...records].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
     [records],
   );
-  const collectedTips = useMemo(
-    () => SLEEP_TIPS.filter((tip) => collectedTipIds.includes(tip.id)),
-    [collectedTipIds],
+  const dailyMission = useMemo(
+    () => selectDailyMission(SLEEP_MISSIONS, stampedDates, todayKey),
+    [stampedDates, todayKey],
   );
+  const isTodayMissionCompleted = stampedDates.includes(todayKey);
   const latestRecord = sortedRecords[0];
   const latestScore = latestRecord?.score ?? 78;
   const aiComment = buildAiComment(latestRecord, goalHours);
@@ -292,6 +317,13 @@ export default function App() {
     setRecords((current) => current.filter((record) => record.id !== id));
   };
 
+  const completeTodayMission = () => {
+    setStampedDates((current) => (current.includes(todayKey) ? current : [...current, todayKey].sort()));
+    setCompletedMissionIds((current) =>
+      current.includes(dailyMission.mission.id) ? current : [...current, dailyMission.mission.id],
+    );
+  };
+
   return (
     <main className="min-h-screen bg-[#edf5f4] text-slate-900">
       <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-5 py-6">
@@ -312,7 +344,7 @@ export default function App() {
               {view === 'home' && '睡眠ホーム'}
               {view === 'record' && '睡眠記録'}
               {view === 'history' && '履歴'}
-              {view === 'tips' && '豆知識'}
+              {view === 'stamps' && 'スタンプ'}
             </h1>
           </div>
           <button
@@ -371,25 +403,14 @@ export default function App() {
               </p>
             </div>
 
-            <div className="rounded-lg bg-white p-5 shadow-sm">
-              <div className="mb-3 flex items-center gap-2 text-amber-700">
-                <Lightbulb size={20} />
-                <p className="text-sm font-semibold">今日の睡眠豆知識</p>
-              </div>
-              <p className="text-xs font-bold text-slate-400">
-                {dailyTip.dayLabel} / {collectedTipIds.length} / 365個
-              </p>
-              <p className="mt-2 text-lg font-black text-slate-900">{dailyTip.title}</p>
-              <p className="mt-2 text-sm leading-6 text-slate-600">{dailyTip.body}</p>
-              <button
-                type="button"
-                onClick={() => setView('tips')}
-                className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-md bg-amber-50 font-bold text-amber-800"
-              >
-                <BookOpen size={18} />
-                集めた豆知識を見る
-              </button>
-            </div>
+            <DailyMissionCard
+              mission={dailyMission.mission}
+              todayKey={todayKey}
+              dayCount={dailyMission.dayCount}
+              isCompleted={isTodayMissionCompleted}
+              onComplete={completeTodayMission}
+              onOpenStampCard={() => setView('stamps')}
+            />
 
             <div className="rounded-lg bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-center justify-between gap-3">
@@ -612,36 +633,14 @@ export default function App() {
           </section>
         )}
 
-        {view === 'tips' && (
-          <section className="flex flex-1 flex-col gap-3">
-            <div className="rounded-lg bg-white p-5 shadow-sm">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-slate-500">集めた睡眠豆知識</p>
-                  <p className="mt-1 text-3xl font-black text-slate-900">
-                    {collectedTips.length} / 365
-                  </p>
-                </div>
-                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-50 text-amber-700">
-                  <BookOpen size={27} />
-                </div>
-              </div>
-              <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100">
-                <div
-                  className="h-full rounded-full bg-amber-500"
-                  style={{ width: `${(collectedTips.length / SLEEP_TIPS.length) * 100}%` }}
-                />
-              </div>
-            </div>
-
-            {collectedTips.map((tip) => (
-              <article key={tip.id} className="rounded-lg bg-white p-4 shadow-sm">
-                <p className="text-xs font-bold text-amber-700">No. {tip.id}</p>
-                <p className="mt-1 font-black text-slate-900">{tip.title}</p>
-                <p className="mt-2 text-sm leading-6 text-slate-600">{tip.body}</p>
-              </article>
-            ))}
-          </section>
+        {view === 'stamps' && (
+          <StampCard
+            monthKey={stampMonth}
+            stampedDates={stampedDates}
+            currentStreak={missionStats.currentStreak}
+            longestStreak={missionStats.longestStreak}
+            onChangeMonth={setStampMonth}
+          />
         )}
       </div>
     </main>
