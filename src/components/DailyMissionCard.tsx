@@ -50,7 +50,7 @@ export function DailyMissionCard({
           </p>
           <p className="mt-1 text-sm leading-6 text-teal-900">{missionReason}</p>
         </div>
-        <InfoBlock label="理由" text={mission.reason} />
+        <InfoBlock label="期待できる効果" text={mission.reason} />
         <InfoBlock label="おすすめタイミング" text={mission.bestTiming} />
       </div>
 
