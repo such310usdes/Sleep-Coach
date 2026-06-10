@@ -306,7 +306,7 @@ export default function App() {
           </button>
           <div className="text-center">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-teal-700">
-              SleepTune
+              Sleep Coach
             </p>
             <h1 className="text-lg font-bold">
               {view === 'home' && '睡眠ホーム'}
