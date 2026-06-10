@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   Clock3,
   Coffee,
+  MessageSquareText,
   History,
   Lightbulb,
   Moon,
@@ -51,6 +52,8 @@ const STORAGE_KEY = 'sleep-improvement-records';
 const GOAL_KEY = 'sleep-improvement-goal-hours';
 const COLLECTED_TIPS_KEY = 'sleep-improvement-collected-tips';
 const DEFAULT_GOAL_HOURS = 7.5;
+const FEEDBACK_FORM_URL =
+  'https://docs.google.com/forms/d/e/1FAIpQLSd4FiHOVO-vlTi1XXdtGjxo_d0NYwLPwXz4Cai_smp7HS1J-w/viewform?usp=header';
 
 function getTodayDateInput() {
   return new Intl.DateTimeFormat('sv-SE', {
@@ -447,6 +450,16 @@ export default function App() {
                 })}
               </div>
             </div>
+
+            <a
+              href={FEEDBACK_FORM_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="flex h-12 items-center justify-center gap-2 rounded-lg bg-white font-bold text-slate-700 shadow-sm"
+            >
+              <MessageSquareText size={19} className="text-teal-700" />
+              使ってみた感想を送る
+            </a>
 
           </section>
         )}
