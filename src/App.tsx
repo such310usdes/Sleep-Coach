@@ -40,6 +40,7 @@ type SleepRecord = {
   date: string;
   bedtime: string;
   wakeTime: string;
+  noSleep?: boolean;
   mood: Mood;
   sleepiness: Sleepiness;
   caffeine: Caffeine;
@@ -52,6 +53,7 @@ type FormState = {
   recordDate: string;
   bedtime: string;
   wakeTime: string;
+  noSleep: boolean;
   mood: Mood;
   sleepiness: Sleepiness;
   caffeine: Caffeine;
@@ -75,6 +77,7 @@ const initialForm: FormState = {
   recordDate: getTodayDateInput(),
   bedtime: '23:30',
   wakeTime: '07:00',
+  noSleep: false,
   mood: '普通',
   sleepiness: '普通',
   caffeine: '少し',
@@ -138,6 +141,10 @@ function calculateScore(
   record: Omit<SleepRecord, 'id' | 'date' | 'durationHours' | 'score'>,
   goalHours = DEFAULT_GOAL_HOURS,
 ) {
+  if (record.noSleep) {
+    return 45;
+  }
+
   const duration = calculateDurationHours(record.bedtime, record.wakeTime);
   let score = 92;
 
@@ -168,6 +175,122 @@ function getScoreTone(score: number) {
   return 'text-amber-700';
 }
 
+function formatHoursLabel(hours: number) {
+  const wholeHours = Math.floor(hours);
+  const minutes = Math.round((hours - wholeHours) * 60);
+
+  if (minutes === 0) return `${wholeHours}時間`;
+  return `${wholeHours}時間${minutes}分`;
+}
+
+function formatGoalHours(hours: number) {
+  return formatHoursLabel(hours);
+}
+
+function formatDurationDelta(deltaHours: number) {
+  const absMinutes = Math.abs(Math.round(deltaHours * 60));
+  const hours = Math.floor(absMinutes / 60);
+  const minutes = absMinutes % 60;
+  const label = hours > 0 ? `${hours}時間${minutes > 0 ? `${minutes}分` : ''}` : `${minutes}分`;
+
+  if (absMinutes === 0) return '前回と睡眠時間は同じです';
+  return `前回より睡眠時間が${label}${deltaHours > 0 ? '長く' : '短く'}なっています`;
+}
+
+function formatNumberDelta(label: string, delta: number, unit: string) {
+  if (delta === 0) return `${label}は前回と同じです`;
+  return `${label}が前回より${Math.abs(delta)}${unit}${delta > 0 ? '上がりました' : '下がりました'}`;
+}
+
+function getMoodRank(value: Mood) {
+  return { 悪い: 0, 普通: 1, 良い: 2, とても良い: 3 }[value];
+}
+
+function getSleepinessRank(value: Sleepiness) {
+  return { 少ない: 0, 普通: 1, 強い: 2 }[value];
+}
+
+function getCaffeineRank(value: Caffeine) {
+  return { なし: 0, 少し: 1, 多い: 2 }[value];
+}
+
+function buildChangeComparison(records: SleepRecord[]) {
+  if (records.length === 0) {
+    return {
+      title: '変化はまだこれから',
+      items: ['睡眠を記録すると、前回との変化がここに表示されます。'],
+      summary: '記録が増えるほど、あなたの睡眠習慣の傾向が見えやすくなります。',
+    };
+  }
+
+  if (records.length === 1) {
+    return {
+      title: '次の記録で変化が見えます',
+      items: ['記録が増えると、前回との変化が表示されます。'],
+      summary: 'まずは2回目の記録で、睡眠時間・スコア・眠気などを比べられるようになります。',
+    };
+  }
+
+  const [latest, previous] = records;
+  const items: string[] = [];
+
+  if (latest.noSleep) {
+    items.push('今回の睡眠時間は「寝ていない日」として記録されています。');
+  } else if (previous.noSleep) {
+    items.push(`前回は寝ていない日でした。今回は${formatHoursLabel(latest.durationHours)}眠れた記録です。`);
+  } else {
+    items.push(formatDurationDelta(latest.durationHours - previous.durationHours));
+  }
+
+  items.push(formatNumberDelta('睡眠スコア', latest.score - previous.score, '点'));
+
+  const moodDelta = getMoodRank(latest.mood) - getMoodRank(previous.mood);
+  items.push(
+    moodDelta === 0
+      ? `気分は前回と同じ「${latest.mood}」です`
+      : `気分は前回より${moodDelta > 0 ? '良い方向' : '少し低め'}に変化しています`,
+  );
+
+  const sleepinessDelta = getSleepinessRank(latest.sleepiness) - getSleepinessRank(previous.sleepiness);
+  items.push(
+    sleepinessDelta === 0
+      ? `日中の眠気は前回と同じ「${latest.sleepiness}」です`
+      : `日中の眠気は前回より${sleepinessDelta < 0 ? '少なめ' : '強め'}です`,
+  );
+
+  const caffeineDelta = getCaffeineRank(latest.caffeine) - getCaffeineRank(previous.caffeine);
+  items.push(
+    caffeineDelta === 0
+      ? `カフェイン摂取は前回と同じ「${latest.caffeine}」です`
+      : `カフェイン摂取は前回より${caffeineDelta < 0 ? '少なめ' : '多め'}です`,
+  );
+
+  const phoneDelta = latest.phoneMinutes - previous.phoneMinutes;
+  items.push(
+    phoneDelta === 0
+      ? '寝る前スマホ時間は前回と同じです'
+      : `寝る前スマホ時間が前回より${Math.abs(phoneDelta)}分${phoneDelta < 0 ? '短く' : '長く'}なっています`,
+  );
+
+  const recent = records.slice(0, 3);
+  const averageHours =
+    recent.reduce((total, record) => total + record.durationHours, 0) / Math.max(recent.length, 1);
+  const noSleepCount = recent.filter((record) => record.noSleep).length;
+  const recentSummary = `直近${recent.length}回の平均睡眠時間は${formatHoursLabel(averageHours)}です。`;
+  const trend =
+    phoneDelta < 0 && sleepinessDelta < 0
+      ? 'スマホ時間が短い日は、翌日の眠気が少ない傾向が少し見えています。'
+      : noSleepCount > 0
+        ? `直近${recent.length}回の中に、寝ていない日が${noSleepCount}日あります。無理なく休める日を作れると整いやすくなります。`
+        : 'あと数回記録すると、スマホ時間・眠気・スコアのつながりも見えやすくなります。';
+
+  return {
+    title: '前回からの変化',
+    items: items.slice(0, 6),
+    summary: `${recentSummary}${trend}`,
+  };
+}
+
 function toDateKey(dateValue: string) {
   return new Intl.DateTimeFormat('sv-SE', {
     timeZone: 'Asia/Tokyo',
@@ -194,6 +317,7 @@ function getWeeklyData(records: SleepRecord[]) {
       label: new Intl.DateTimeFormat('ja-JP', { weekday: 'short' }).format(date),
       hours: record?.durationHours ?? 0,
       score: record?.score ?? 0,
+      noSleep: Boolean(record?.noSleep),
       hasRecord: Boolean(record),
     };
   });
@@ -202,6 +326,10 @@ function getWeeklyData(records: SleepRecord[]) {
 function buildAiComment(record: SleepRecord | undefined, goalHours: number) {
   if (!record) {
     return `まずは1日分を記録して、目標の${goalHours}時間に近づける流れを見ていきましょう。`;
+  }
+
+  if (record.noSleep) {
+    return '今回は寝ていない日として記録されています。次に休めるタイミングで、短い仮眠や夜の光刺激を減らす行動から整え直していきましょう。';
   }
 
   const gap = Math.round((record.durationHours - goalHours) * 10) / 10;
@@ -240,6 +368,13 @@ function buildScoreInsight(record: SleepRecord | undefined, score: number, goalH
     };
   }
 
+  if (record.noSleep) {
+    return {
+      progressText: `あと${remaining}点で理想的な睡眠に近づきます`,
+      detail: '寝ていない日として記録されています。無理に取り返そうとせず、次の睡眠で起床時間と光の浴び方を整えるとリズムを戻しやすくなります。',
+    };
+  }
+
   if (record.phoneMinutes >= 45) {
     return {
       progressText: `あと${remaining}点で理想的な睡眠に近づきます`,
@@ -273,6 +408,10 @@ function buildMissionReason(record: SleepRecord | undefined, dayCount: number, g
     return '継続の最初なので、まずは短時間でできる行動から始めます。小さく達成することで続けやすくなります。';
   }
 
+  if (record?.noSleep) {
+    return '直近に寝ていない日があるため、負担を増やしすぎずリズムを戻しやすい行動を提案しています。';
+  }
+
   if (record?.phoneMinutes && record.phoneMinutes >= 45) {
     return '寝る前のスマホ時間が長めなので、夜の光刺激や気持ちの切り替えを意識しやすいミッションを選んでいます。';
   }
@@ -289,10 +428,11 @@ function buildMissionReason(record: SleepRecord | undefined, dayCount: number, g
 }
 
 function buildWeeklyReview(
-  weeklyData: Array<{ hours: number; score: number; hasRecord: boolean; dateKey: string }>,
+  weeklyData: Array<{ hours: number; score: number; noSleep: boolean; hasRecord: boolean; dateKey: string }>,
   stampedDates: string[],
 ) {
   const recordedDays = weeklyData.filter((day) => day.hasRecord);
+  const noSleepDays = recordedDays.filter((day) => day.noSleep).length;
   const averageHours =
     recordedDays.reduce((total, day) => total + day.hours, 0) / Math.max(recordedDays.length, 1);
   const averageScore =
@@ -302,7 +442,9 @@ function buildWeeklyReview(
 
   let comment = 'まずは記録とミッションを数日続けて、あなたの睡眠リズムを見える化していきましょう。';
 
-  if (recordedDays.length >= 3 && averageHours >= 7 && missionCompletedDays >= 3) {
+  if (noSleepDays > 0) {
+    comment = `今週は寝ていない日が${noSleepDays}日あります。次の記録では、休めた時間と日中の眠気を一緒に見ていきましょう。`;
+  } else if (recordedDays.length >= 3 && averageHours >= 7 && missionCompletedDays >= 3) {
     comment = '今週は睡眠時間とミッションの積み上げが安定しています。次は起床時間のばらつきを少し減らしてみましょう。';
   } else if (missionCompletedDays >= 3) {
     comment = 'ミッション達成が続いています。睡眠記録も合わせると、改善ポイントがさらに見えやすくなります。';
@@ -314,6 +456,7 @@ function buildWeeklyReview(
     averageHours,
     averageScore,
     missionCompletedDays,
+    noSleepDays,
     comment,
   };
 }
@@ -369,6 +512,7 @@ export default function App() {
   const latestScore = latestRecord?.score ?? 78;
   const scoreInsight = buildScoreInsight(latestRecord, latestScore, goalHours);
   const aiComment = buildAiComment(latestRecord, goalHours);
+  const changeComparison = buildChangeComparison(sortedRecords);
   const weeklyData = useMemo(() => getWeeklyData(sortedRecords), [sortedRecords]);
   const weeklyAverage =
     weeklyData.filter((day) => day.hasRecord).reduce((total, day) => total + day.hours, 0) /
@@ -377,8 +521,8 @@ export default function App() {
   const weeklyReview = buildWeeklyReview(weeklyData, stampedDates);
   const { completedCount: monthCompletedCount } = getMonthStats(stampedDates, getMonthKey());
   const previewDuration = useMemo(
-    () => calculateDurationHours(form.bedtime, form.wakeTime),
-    [form.bedtime, form.wakeTime],
+    () => (form.noSleep ? 0 : calculateDurationHours(form.bedtime, form.wakeTime)),
+    [form.bedtime, form.noSleep, form.wakeTime],
   );
 
   const updateForm = <K extends keyof FormState>(key: K, value: FormState[K]) => {
@@ -393,12 +537,13 @@ export default function App() {
     const draft = {
       bedtime: form.bedtime,
       wakeTime: form.wakeTime,
+      noSleep: form.noSleep,
       mood: form.mood,
       sleepiness: form.sleepiness,
       caffeine: form.caffeine,
       phoneMinutes: Number(form.phoneMinutes || 0),
     };
-    const durationHours = calculateDurationHours(draft.bedtime, draft.wakeTime);
+    const durationHours = draft.noSleep ? 0 : calculateDurationHours(draft.bedtime, draft.wakeTime);
     const score = calculateScore(draft, goalHours);
     const record: SleepRecord = {
       id: crypto.randomUUID(),
@@ -442,14 +587,23 @@ export default function App() {
       />
       <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-5 py-6">
         <header className="mb-5 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => setView('home')}
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-slate-700 shadow-sm"
-            aria-label="ホームへ戻る"
-          >
-            {view === 'home' ? <Moon size={22} /> : <ChevronLeft size={22} />}
-          </button>
+          {view === 'home' ? (
+            <div
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm"
+              aria-hidden="true"
+            >
+              <Moon size={22} />
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setView('home')}
+              className="flex h-11 items-center justify-center gap-1 rounded-full bg-white px-3 text-sm font-bold text-slate-700 shadow-sm"
+            >
+              <ChevronLeft size={20} />
+              戻る
+            </button>
+          )}
           <div className="text-center">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-teal-700">
               Sleep Coach
@@ -464,10 +618,10 @@ export default function App() {
           <button
             type="button"
             onClick={() => setView('history')}
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-slate-700 shadow-sm"
-            aria-label="履歴を見る"
+            className="flex h-11 items-center justify-center gap-1 rounded-full bg-white px-3 text-sm font-bold text-slate-700 shadow-sm"
           >
-            <History size={21} />
+            <History size={19} />
+            履歴
           </button>
         </header>
 
@@ -504,7 +658,9 @@ export default function App() {
               <p className="mt-2 text-sm leading-6 text-slate-500">{scoreInsight.detail}</p>
               <p className="mt-3 text-sm text-slate-500">
                 {latestRecord
-                  ? `${formatDate(latestRecord.date)} の記録から計算`
+                  ? latestRecord.noSleep
+                    ? `${formatDate(latestRecord.date)} は寝ていない日として記録済み`
+                    : `${formatDate(latestRecord.date)} の記録から計算`
                   : 'まだ記録がないためサンプル値を表示中'}
               </p>
               <button
@@ -516,6 +672,12 @@ export default function App() {
                 睡眠を記録
               </button>
             </div>
+
+            <ChangeComparisonCard
+              title={changeComparison.title}
+              items={changeComparison.items}
+              summary={changeComparison.summary}
+            />
 
             <LevelProgressCard
               level={dailyMission.level}
@@ -540,20 +702,27 @@ export default function App() {
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-slate-500">目標睡眠時間</p>
-                  <p className="mt-1 text-2xl font-black text-slate-900">{goalHours}時間</p>
+                  <p className="mt-1 text-2xl font-black text-slate-900">
+                    目標睡眠時間：{formatGoalHours(goalHours)}
+                  </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setIsEditingGoal((current) => !current)}
+                <div
                   className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-700"
-                  aria-label="目標睡眠時間を変更"
+                  aria-hidden="true"
                 >
                   <Target size={24} />
-                </button>
+                </div>
               </div>
               <p className="text-sm leading-6 text-slate-500">
-                ホームでは固定表示です。変更したいときだけ右上のアイコンから調整できます。
+                ホームでは固定表示です。変更したいときだけ下のボタンから調整できます。
               </p>
+              <button
+                type="button"
+                onClick={() => setIsEditingGoal((current) => !current)}
+                className="mt-4 flex h-11 w-full items-center justify-center rounded-lg bg-amber-50 font-bold text-amber-800"
+              >
+                {isEditingGoal ? '目標選択を閉じる' : '変更する'}
+              </button>
               {isEditingGoal && (
                 <div className="mt-4">
                   <p className="mb-2 text-xs font-bold text-slate-500">目標を選択</p>
@@ -601,10 +770,16 @@ export default function App() {
                       <div className="flex h-24 w-full items-end rounded-md bg-slate-50 px-1">
                         <div
                           className={`w-full rounded-md ${
-                            day.hasRecord ? 'bg-teal-500' : 'bg-slate-200'
+                            day.noSleep ? 'bg-rose-400' : day.hasRecord ? 'bg-teal-500' : 'bg-slate-200'
                           }`}
                           style={{ height: `${height}%` }}
-                          title={day.hasRecord ? `${day.hours}時間 / ${day.score}点` : '記録なし'}
+                          title={
+                            day.noSleep
+                              ? `寝ていない日 / ${day.score}点`
+                              : day.hasRecord
+                                ? `${day.hours}時間 / ${day.score}点`
+                                : '記録なし'
+                          }
                         />
                       </div>
                       <span className="text-xs font-bold text-slate-500">{day.label}</span>
@@ -618,6 +793,7 @@ export default function App() {
               averageHours={weeklyReview.averageHours}
               averageScore={weeklyReview.averageScore}
               missionCompletedDays={weeklyReview.missionCompletedDays}
+              noSleepDays={weeklyReview.noSleepDays}
               comment={weeklyReview.comment}
             />
 
@@ -651,20 +827,46 @@ export default function App() {
               />
             </label>
 
-            <div className="grid grid-cols-2 gap-3">
-              <TimeField
-                label="就寝時間"
-                icon={<Moon size={19} />}
-                value={form.bedtime}
-                onChange={(value) => updateForm('bedtime', value)}
-              />
-              <TimeField
-                label="起床時間"
-                icon={<Sun size={19} />}
-                value={form.wakeTime}
-                onChange={(value) => updateForm('wakeTime', value)}
-              />
+            <div className="rounded-lg bg-white p-4 shadow-sm">
+              <p className="text-sm font-semibold text-slate-600">睡眠の状態</p>
+              <button
+                type="button"
+                onClick={() => updateForm('noSleep', !form.noSleep)}
+                className={`mt-3 flex h-12 w-full items-center justify-center rounded-lg border font-bold ${
+                  form.noSleep
+                    ? 'border-rose-300 bg-rose-50 text-rose-700'
+                    : 'border-slate-200 bg-slate-50 text-slate-700'
+                }`}
+              >
+                {form.noSleep ? '徹夜として記録中（解除する）' : '今日は寝ていない・徹夜した'}
+              </button>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                {form.noSleep
+                  ? '就寝時間・起床時間なしで保存できます。睡眠時間は「寝ていない日」として扱います。'
+                  : '通常の睡眠記録として、就寝時間と起床時間を入力します。'}
+              </p>
             </div>
+
+            {form.noSleep ? (
+              <div className="rounded-lg border border-rose-100 bg-rose-50 p-4 text-sm leading-6 text-rose-800">
+                今日は寝ていない日として記録します。気分・眠気・スマホ時間だけ入力して保存できます。
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <TimeField
+                  label="就寝時間"
+                  icon={<Moon size={19} />}
+                  value={form.bedtime}
+                  onChange={(value) => updateForm('bedtime', value)}
+                />
+                <TimeField
+                  label="起床時間"
+                  icon={<Sun size={19} />}
+                  value={form.wakeTime}
+                  onChange={(value) => updateForm('wakeTime', value)}
+                />
+              </div>
+            )}
 
             <SelectField
               label="気分"
@@ -714,7 +916,9 @@ export default function App() {
 
             <div className="rounded-lg bg-white p-4 shadow-sm">
               <p className="text-sm font-semibold text-slate-500">入力中の睡眠時間</p>
-              <p className="mt-1 text-3xl font-black text-slate-900">{previewDuration}時間</p>
+              <p className="mt-1 text-3xl font-black text-slate-900">
+                {form.noSleep ? '寝ていない日' : formatHoursLabel(previewDuration)}
+              </p>
             </div>
 
             <button
@@ -751,7 +955,7 @@ export default function App() {
                     <div>
                       <p className="text-sm font-semibold text-slate-500">{formatDate(record.date)}</p>
                       <p className="mt-1 text-lg font-bold text-slate-900">
-                        {record.bedtime} - {record.wakeTime}
+                        {record.noSleep ? '寝ていない日' : `${record.bedtime} - ${record.wakeTime}`}
                       </p>
                     </div>
                     <p className={`text-3xl font-black ${getScoreTone(record.score)}`}>
@@ -761,7 +965,9 @@ export default function App() {
                   <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                     <div className="rounded-md bg-slate-50 p-3">
                       <p className="text-slate-500">睡眠時間</p>
-                      <p className="mt-1 font-bold">{record.durationHours}時間</p>
+                      <p className="mt-1 font-bold">
+                        {record.noSleep ? '寝ていない日' : formatHoursLabel(record.durationHours)}
+                      </p>
                     </div>
                     <div className="rounded-md bg-slate-50 p-3">
                       <p className="text-slate-500">睡眠スコア</p>
@@ -793,6 +999,43 @@ export default function App() {
         )}
       </div>
     </main>
+  );
+}
+
+function ChangeComparisonCard({
+  title,
+  items,
+  summary,
+}: {
+  title: string;
+  items: string[];
+  summary: string;
+}) {
+  return (
+    <section className="rounded-lg bg-white p-5 shadow-sm">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-500">記録の変化</p>
+          <h2 className="mt-1 text-xl font-black text-slate-900">{title}</h2>
+        </div>
+        <div
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-sky-50 text-sky-700"
+          aria-hidden="true"
+        >
+          <Sparkles size={22} />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {items.map((item) => (
+          <p key={item} className="rounded-md bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700">
+            {item}
+          </p>
+        ))}
+      </div>
+
+      <p className="mt-3 rounded-md bg-teal-50 p-3 text-sm leading-6 text-teal-800">{summary}</p>
+    </section>
   );
 }
 

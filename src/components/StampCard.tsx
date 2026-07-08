@@ -32,10 +32,10 @@ export function StampCard({
           <button
             type="button"
             onClick={() => onChangeMonth(moveMonth(monthKey, -1))}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-700"
-            aria-label="前の月"
+            className="flex h-10 items-center justify-center gap-1 rounded-full bg-slate-100 px-3 text-xs font-bold text-slate-700"
           >
-            <ChevronLeft size={20} />
+            <ChevronLeft size={18} />
+            前月
           </button>
           <div className="text-center">
             <p className="text-sm font-semibold text-slate-500">1ヶ月スタンプカード</p>
@@ -44,10 +44,10 @@ export function StampCard({
           <button
             type="button"
             onClick={() => onChangeMonth(moveMonth(monthKey, 1))}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-700"
-            aria-label="次の月"
+            className="flex h-10 items-center justify-center gap-1 rounded-full bg-slate-100 px-3 text-xs font-bold text-slate-700"
           >
-            <ChevronRight size={20} />
+            次月
+            <ChevronRight size={18} />
           </button>
         </div>
 

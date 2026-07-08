@@ -4,6 +4,7 @@ type WeeklyReviewCardProps = {
   averageHours: number;
   averageScore: number;
   missionCompletedDays: number;
+  noSleepDays: number;
   comment: string;
 };
 
@@ -11,6 +12,7 @@ export function WeeklyReviewCard({
   averageHours,
   averageScore,
   missionCompletedDays,
+  noSleepDays,
   comment,
 }: WeeklyReviewCardProps) {
   return (
@@ -25,10 +27,11 @@ export function WeeklyReviewCard({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 text-center">
+      <div className="grid grid-cols-2 gap-2 text-center">
         <Stat label="平均睡眠" value={`${averageHours.toFixed(1)}h`} />
         <Stat label="平均スコア" value={`${Math.round(averageScore)}点`} />
         <Stat label="ミッション" value={`${missionCompletedDays}日`} />
+        <Stat label="寝ていない日" value={`${noSleepDays}日`} />
       </div>
 
       <p className="mt-4 rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-600">
