@@ -142,7 +142,7 @@ function calculateScore(
   goalHours = DEFAULT_GOAL_HOURS,
 ) {
   if (record.noSleep) {
-    return 45;
+    return 0;
   }
 
   const duration = calculateDurationHours(record.bedtime, record.wakeTime);
@@ -157,7 +157,7 @@ function calculateScore(
   if (record.caffeine === '多い') score -= 14;
   score -= Math.min(record.phoneMinutes / 8, 16);
 
-  return Math.max(45, Math.min(100, Math.round(score)));
+  return Math.max(0, Math.min(100, Math.round(score)));
 }
 
 function formatDate(dateValue: string) {
