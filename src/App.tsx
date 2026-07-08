@@ -87,7 +87,11 @@ const initialForm: FormState = {
 function loadRecords(): SleepRecord[] {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? (JSON.parse(saved) as SleepRecord[]) : [];
+    const parsed = saved ? (JSON.parse(saved) as SleepRecord[]) : [];
+
+    return parsed.map((record) =>
+      record.noSleep ? { ...record, durationHours: 0, score: 0 } : record,
+    );
   } catch {
     return [];
   }
@@ -509,7 +513,7 @@ export default function App() {
   );
   const isTodayMissionCompleted = stampedDates.includes(todayKey);
   const latestRecord = sortedRecords[0];
-  const latestScore = latestRecord?.score ?? 78;
+  const latestScore = latestRecord?.noSleep ? 0 : latestRecord?.score ?? 78;
   const scoreInsight = buildScoreInsight(latestRecord, latestScore, goalHours);
   const aiComment = buildAiComment(latestRecord, goalHours);
   const changeComparison = buildChangeComparison(sortedRecords);
